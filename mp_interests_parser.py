@@ -9,6 +9,9 @@ import json
 import pandas as pd
 import bs4
 import re
+import nltk
+import senna
+import itertools
 
 
 def get_scraped_data_into_dataframe():
@@ -32,7 +35,7 @@ def get_scraped_data_into_dataframe():
     scraped_data = scraped_data.query('ilevel_1 != \"100927\"')
     
     # Gets the first (and only) element of the main_text elements in each row
-    scraped_data['main_text'] = scraped_data['main_text'].apply(lambda x: x[0])
+    scraped_data.loc[:, 'main_text'] = scraped_data['main_text'].apply(lambda x: x[0])
     
     return scraped_data
     
@@ -104,4 +107,62 @@ def tag_tree(text):
     
     return root
     
+def quantities_of_gbp(text):
+    """Looks for anything that resembles an quantity of GBP in the text of a tag, and turns them into
+    a list of ints"""
+    
+    quantity_strings = re.findall('(?<=\xa3)[\d,]*', text)
+    quantities = [int(s.replace(',', '')) for s in quantity_strings]
+
+    return quantities
+    
+def named_entities(text):
+    """Uses SENNA to extract the tokens corresponding to named entities in a chunk of text"""
+    
+    sentences = nltk.tokenize.sent_tokenize(text)    
+    
+    tagger = senna.SennaTagger('/Users/andyjones/senna', ['ner'])
+    tagged_tokens = tagger.tag_sents(sentences)
+    
+    all_named_entity_phrases = []    
+    
+    for sentence_tokens in tagged_tokens:
+        chunks = itertools.groupby(sentence_tokens, lambda x: x['ner'] == 'O')
+        named_entity_chunks = [list(chunk) for k, chunk in chunks if not k]
+        named_entity_phrases = [' '.join([token['word'] for token in chunk]) for chunk in named_entity_chunks]
+
+        all_named_entity_phrases.extend(named_entity_phrases)    
+    
+    return all_named_entity_phrases
+
+def map_over_tree(root, f):
+    """Applies the function f to the value of each node in the tree under the given root, 
+    and stores the result in a new tree"""
+    
+    result = f(root.value)
+    new_children = [map_over_tree(child, f) for child in root.children]
+
+    new_root = Node(result)    
+    new_root.children = new_children
+
+    return new_root    
+
+def map_over_text_in_tag_tree(root, f):
+    """Applies the function f to the text of each tag in the tree under the given root,
+    and stores the result in a new tree. Nodes which are not of bs4.element.Tag type are preserved"""
+
+    def g(value):
+        if type(value) == bs4.element.Tag:
+            text = '\n'.join(value.stripped_strings)
+            return f(text)
+        else:
+            return value
+        
+    return map_over_tree(root, g)
+    
+
 #results = scraped_data.xs("141208", level=1)['main_text'].apply(lambda x: tag_tree(x))
+#test_text = list(results.iloc[0][0][0][0].value.strings)[0]
+#sentences = nltk.tokenize.sent_tokenize(test_text)
+#test_sentence = sentences[0]
+
