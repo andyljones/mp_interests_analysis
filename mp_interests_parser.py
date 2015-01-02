@@ -115,7 +115,7 @@ def tag_tree(text):
         current_path.append(node)
     
     return root
-    
+
 def quantities_of_gbp(text):
     """Looks for anything that resembles an quantity of GBP in the text of a tag, and turns them into
     a list of ints"""
@@ -144,6 +144,12 @@ def named_entities(text):
     
     return all_named_entity_phrases
 
+def non_address_named_entities(text):
+    sentences = nltk.tokenize.sent_tokenize(text)    
+    non_address_sentences = [s for s in sentences if not re.match("Address:", s)]
+    
+    return named_entities(' '.join(non_address_sentences))
+
 def map_over_tree(root, f):
     """Applies the function f to the value of each node in the tree under the given root, 
     and stores the result in a new tree"""
@@ -168,7 +174,7 @@ def map_over_text_in_tag_tree(root, f):
             return value
         
     return map_over_tree(root, g)
-    
+     
 def merge_trees(left_root, right_root):
     """Assuming the trees have the same structure, returns a new tree with the values of each pair of nodes 
     tupled. If the trees' structure differs, raises a ValueException"""
@@ -186,6 +192,36 @@ def merge_trees(left_root, right_root):
     new_root.children = new_children
     
     return new_root
+
+def group_tag_text(first_tag, last_tag):
+    """Groups the text of a set of tags, with the groups delineated by 
+        - tags with the class 'spacer'
+        - tags of different depth to the first tag"""
+
+    first_depth = depth(first_tag)
+    text_groups = [[]]
+    
+    current_element = first_tag 
+    # Loop over the elements between the first & last tags.
+    while True:
+        # If the current element is of interest, use it to either add to the most recent textgroup, or to
+        # start a new one.
+        if type(current_element) == bs4.element.Tag:
+            if "class" in current_element.attrs and "spacer" in current_element["class"]:
+                text_groups.append([])
+            elif "class" in current_element.attrs and depth(current_element) != first_depth:
+                text_groups.append([])
+            elif "class" in current_element.attrs and depth(current_element) == first_depth:
+                text_groups[-1].extend(current_element.stripped_strings)
+            
+        if current_element == last_tag:
+            break
+        else:
+            current_element = current_element.next_sibling
+
+    nonempty_text_groups = [group for group in text_groups if group]
+    
+    return nonempty_text_groups
 
 #results = scraped_data.xs("141208", level=1)['main_text'].apply(lambda x: tag_tree(x))
 #test_text = list(results.iloc[0][0][0][0].value.strings)[0]
