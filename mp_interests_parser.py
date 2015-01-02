@@ -55,6 +55,15 @@ class Node:
     
     def __repr__(self):
         return "Node(%r, %d children)" % (self.value, len(self.children))
+        
+    def tree_str(self, level=0):
+        self_string = "\t"*level + repr(self.value)
+        child_string = ''.join([child.tree_str(level+1) for child in self.children])
+        
+        return self_string + "\n" + child_string                
+    
+    def __str__(self):
+        return self.tree_str()
 
 def depth(tag):
     """On each MP's page in the register of interests, the formatting of the tags implies a hierarchy.
@@ -160,6 +169,23 @@ def map_over_text_in_tag_tree(root, f):
         
     return map_over_tree(root, g)
     
+def merge_trees(left_root, right_root):
+    """Assuming the trees have the same structure, returns a new tree with the values of each pair of nodes 
+    tupled. If the trees' structure differs, raises a ValueException"""
+    
+    new_value = (left_root.value, right_root.value)
+    
+    left_size = len(left_root.children)
+    right_size = len(right_root.children)
+    if left_size == right_size:
+        new_children = [merge_trees(*root_pair) for root_pair in zip(left_root.children, right_root.children)]
+    else:
+        raise ValueError("Unequal numbers of children: left root had %d but right root had %d" % (left_size, right_size))
+
+    new_root = Node(new_value)
+    new_root.children = new_children
+    
+    return new_root
 
 #results = scraped_data.xs("141208", level=1)['main_text'].apply(lambda x: tag_tree(x))
 #test_text = list(results.iloc[0][0][0][0].value.strings)[0]
