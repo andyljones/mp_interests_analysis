@@ -109,6 +109,18 @@ def named_entities(text):
         all_named_entity_phrases.extend(named_entity_phrases)    
     
     return all_named_entity_phrases
+    
+def gbp_and_named_entities(html):
+    """Extracts a list of (quantity, [name]) from the given HTML. Each tuple corresponds to a spacer-deliminted
+    section of the HTML"""
+    
+    text = list(itertools.chain(*[contents for _, contents in text_subsections(html)]))
+    
+    entities = [named_entities(t) for t in text]
+    gbp = [sum(list_of_gbp) for list_of_gbp in [quantities_of_gbp(t) for t in text]]
+    
+    return zip(gbp, entities)
+
 
 
 
