@@ -12,7 +12,7 @@ import re
 import nltk
 import senna
 import itertools
-
+import numpy
 
 def get_scraped_data_into_dataframe():
     """Gets the scraped data from its JSON file and formats it as a dataframe"""
@@ -55,7 +55,7 @@ def is_a_spacer(tag):
 def text(tags):
     """Gets all the nonempty strings in a collection of tags, and returns them as a single string
     divided by newlines"""
-    return "\n".join(list(itertools.chain(*[tag.stripped_strings for tag in tags])))
+    return list(itertools.chain(*[tag.stripped_strings for tag in tags]))
 
 def subsections(html):
     """Returns a list of (header_tag, [contained_tag]) elements, each one representing a subsection"""
@@ -74,7 +74,12 @@ def subsections(html):
     
 def group_text_by_spacer(tags):
     """Groups a list of tags according to where spacer tags appear. Discards the spacer tags themselves"""
-    return [text(group) for key, group in itertools.groupby(tags, is_a_spacer) if not key]
+    result = []    
+    for key, group in itertools.groupby(tags, is_a_spacer):
+        if not key:
+            result.append(text(group))
+            
+    return result
     
 def text_subsections(html):
     """Returns a list of (header_text, [contained_text]) elements, each one representing a subsection. The
@@ -86,47 +91,76 @@ def quantities_of_gbp(text):
     """Looks for anything that resembles an quantity of GBP in the text of a tag, and turns them into
     a list of ints"""
     
-    quantity_strings = re.findall('(?<=\xa3)[\d,]*', text)
+    quantity_strings = re.findall('(?<=\xa3)\d+[\d,]*', text)
     quantities = [int(s.replace(',', '')) for s in quantity_strings]
 
     return quantities
     
-def named_entities(text):
-    """Uses SENNA to extract the tokens corresponding to named entities in a chunk of text"""
-    
-    sentences = nltk.tokenize.sent_tokenize(text)    
-    
-    tagger = senna.SennaTagger('/Users/andyjones/senna', ['ner'])
-    tagged_tokens = tagger.tag_sents(sentences)
-    
+def named_entities_from_senna_output(tagged_tokens):
+    """Takes a list of lists of dictionaries, where each list represents a sentence and each dictionary holds
+    a tagged word, and returns the chunks corresponding to named entities"""
     all_named_entity_phrases = []    
     
     for sentence_tokens in tagged_tokens:
+        # Creates groups of tokens deliminated by tokens which haven't been marked as named entities
         chunks = itertools.groupby(sentence_tokens, lambda x: x['ner'] == 'O')
         named_entity_chunks = [list(chunk) for k, chunk in chunks if not k]
         named_entity_phrases = [' '.join([token['word'] for token in chunk]) for chunk in named_entity_chunks]
 
-        all_named_entity_phrases.extend(named_entity_phrases)    
+        all_named_entity_phrases.append(named_entity_phrases)    
     
     return all_named_entity_phrases
+    
+def senna_batch_ner_processor(texts):
+    """Takes a list of lists of sentences and passes them all through the SENNA NER tagger at the same time."""
+    
+    sentences = []
+    num_sentences_per_text = []
+    for t in texts:
+        sentences_in_text = list(itertools.chain(*[nltk.tokenize.sent_tokenize(s) for s in t]))
+        sentences.extend(sentences_in_text)
+        num_sentences_per_text.append(len(sentences_in_text))
+    
+    tagger = senna.SennaTagger('/Users/andyjones/senna', ['ner'])
+    tagged_tokens = tagger.tag_sents(sentences)
+
+    result = []
+    accumulator = 0
+    for length in num_sentences_per_text:
+        result.append(list(itertools.chain(*tagged_tokens[accumulator:accumulator + length])))
+        accumulator = accumulator + length
+        
+    return named_entities_from_senna_output(result)
     
 def gbp_and_named_entities(html):
     """Extracts a list of (quantity, [name]) from the given HTML. Each tuple corresponds to a spacer-deliminted
     section of the HTML"""
     
-    text = list(itertools.chain(*[contents for _, contents in text_subsections(html)]))
+    texts = list(itertools.chain(*[contents for _, contents in text_subsections(html)]))
     
-    entities = [named_entities(t) for t in text]
-    gbp = [sum(list_of_gbp) for list_of_gbp in [quantities_of_gbp(t) for t in text]]
+    entities = senna_batch_ner_processor(texts)
+    gbp = [sum(itertools.chain(*[quantities_of_gbp(s) for s in t])) for t in texts]
+
+    # Pair the entities and GBP quantities, then drop the pairs which have no quantity and no names
+    nonempty_pairs = [pair for pair in zip(gbp, entities) if pair[0] or pair[1]]
     
-    return zip(gbp, entities)
-
-
-
-
+    return nonempty_pairs    
+    
 #results = scraped_data.xs("141208", level=1)['main_text'].apply(lambda x: tag_tree(x))
 test_html = scraped_data.xs("141208", level=1)['main_text'].iloc[-1]
 #test_text = list(results.iloc[0][0][0][0].value.strings)[0]
 #sentences = nltk.tokenize.sent_tokenize(test_text)
 #test_sentence = sentences[0]
+
+#source_html = scraped_data.xs("141208", level=1)['main_text']
+#
+#results = pd.DataFrame(index=source_html.index, columns={"gbp", "entities"}, dtype=object)
+#for mp in source_html.index:
+#    print(mp)
+#    result = gbp_and_named_entities(source_html[mp])
+#    gbp = [pair[0] for pair in result]
+#    entities = [pair[1] for pair in result]
+#    results.loc[mp, "gbp"] = gbp
+#    results.loc[mp, "entities"] = entities
+
 
