@@ -1,2 +1,4 @@
 *.pyc
 mp_interests_scraping/*.json
+*.pickle
+*.csv
