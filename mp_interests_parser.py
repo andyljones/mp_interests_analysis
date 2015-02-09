@@ -97,21 +97,33 @@ def quantities_of_gbp(text):
     return quantities
     
 def named_entities_from_senna_output(tagged_tokens):
-    """Takes a list of lists of dictionaries, where each list represents a sentence and each dictionary holds
-    a tagged word, and returns the chunks corresponding to named entities"""
-    all_named_entity_phrases = []    
+    """Takes a list of dictionaries that represents a sentence. Each each dictionary should hold
+    a tagged word. Returns the chunks corresponding to named entities as a list of {phrase, type} 
+    dictionaries"""    
     
-    for sentence_tokens in tagged_tokens:
-        # Creates groups of tokens deliminated by tokens which haven't been marked as named entities
-        chunks = itertools.groupby(sentence_tokens, lambda x: x['ner'] == 'O')
-        named_entity_chunks = [list(chunk) for k, chunk in chunks if not k]
-        named_entity_phrases = [' '.join([token['word'] for token in chunk]) for chunk in named_entity_chunks]
+    results = []
+    current = []
+    for tagged_token in tagged_tokens:
+        token = tagged_token['word']
+        tag = tagged_token['ner']
 
-        all_named_entity_phrases.append(named_entity_phrases)    
+        if tag.startswith('B-'):
+            current = [token]
+        elif tag.startswith('I-'):
+            current.append(token)
+        elif tag.startswith('E-'):
+            current.append(token)   
+            phrase = ' '.join(current)
+            phrase_type = tag.split('-')[1]
+            results.append({'phrase': phrase, 'type': phrase_type})
+        elif tag.startswith('S-'):
+            phrase_type = tag.split('-')[1]
+            results.append({'phrase': token, 'type': phrase_type})
+            
+    return results
+
     
-    return all_named_entity_phrases
-    
-def senna_batch_ner_processor(texts):
+def senna_batch_processor(texts, command):
     """Takes a list of lists of sentences and passes them all through the SENNA NER tagger at the same time."""
     
     sentences = []
@@ -121,7 +133,7 @@ def senna_batch_ner_processor(texts):
         sentences.extend(sentences_in_text)
         num_sentences_per_text.append(len(sentences_in_text))
     
-    tagger = senna.SennaTagger('/Users/andyjones/senna', ['ner'])
+    tagger = senna.SennaTagger('/Users/andyjones/senna', [command])
     tagged_tokens = tagger.tag_sents(sentences)
 
     result = []
@@ -130,7 +142,14 @@ def senna_batch_ner_processor(texts):
         result.append(list(itertools.chain(*tagged_tokens[accumulator:accumulator + length])))
         accumulator = accumulator + length
         
-    return named_entities_from_senna_output(result)
+    return result
+    
+def senna_batch_ner_processor(texts):
+    """Takes a list of lists of sentences and passes them all through the SENNA NER tagger at the same time."""
+    
+    result = senna_batch_processor(texts, 'ner')
+    
+    return [named_entities_from_senna_output(r) for r in result] 
     
 def gbp_and_named_entities(html):
     """Extracts a list of (quantity, [name]) from the given HTML. Each tuple corresponds to a spacer-deliminted
@@ -152,15 +171,20 @@ test_html = scraped_data.xs("141208", level=1)['main_text'].iloc[-1]
 #sentences = nltk.tokenize.sent_tokenize(test_text)
 #test_sentence = sentences[0]
 
-#source_html = scraped_data.xs("141208", level=1)['main_text']
 #
-#results = pd.DataFrame(index=source_html.index, columns={"gbp", "entities"}, dtype=object)
-#for mp in source_html.index:
-#    print(mp)
-#    result = gbp_and_named_entities(source_html[mp])
-#    gbp = [pair[0] for pair in result]
-#    entities = [pair[1] for pair in result]
-#    results.loc[mp, "gbp"] = gbp
-#    results.loc[mp, "entities"] = entities
+
+def process_scraped_data():
+    source_html = scraped_data.xs("141208", level=1)['main_text']
+    index = pd.MultiIndex.from_arrays([[], []], names=['mp', 'i'])
+    results = pd.DataFrame(index=index, columns=['gbp', 'entities'], dtype=object)
+    for mp in source_html.index:
+        print(mp)
+        result = gbp_and_named_entities(source_html[mp])
+        if result:
+            index = pd.MultiIndex.from_product([[mp], range(len(result))], names=['mp', 'i'])
+            result = pd.DataFrame(result, index=index, columns=['gbp', 'entities'])
+            results = results.append(result)
+
+    return results
 
 

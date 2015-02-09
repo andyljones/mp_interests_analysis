@@ -12,6 +12,7 @@ import numpy
 import companies_house_parser
 import string
 import numpy as np
+import pickle
 
 def standardize(phrase):
     """
@@ -68,13 +69,18 @@ companies_house_data = companies_house_data if "companies_house_data" in locals(
 companies_house_lookup = companies_house_lookup if "companies_house_lookup" in locals() else build_lookup(companies_house_data.CompanyName)
         
         
-#successes = 0
-#tries = 0
-#for mp, row in mp_interest_data.iterrows():
-#    for entity in filter(bool, row.entities):
-#        leading_np = entity[0]
-#        closest_match = find_closest_company(leading_np, companies_house_lookup, companies_house_data)
-#        if len(closest_match) == 1:
-#            successes = successes + 1
-#        
-#        tries = tries + 1
+def process_interest_data():
+    results = pd.DataFrame(columns=['key', 'matches'], dtype=object)
+    for i, (_, row) in enumerate(mp_interest_data.iterrows()):
+        orgs = [e for e in row.entities if e['type'] == 'ORG']
+    
+        if orgs and orgs[0]['phrase'] != 'Electoral Commission':
+            leading_org = orgs[0]['phrase']
+            closest_matches = find_closest_company(leading_org, companies_house_lookup)
+    
+            closest_names = [companies_house_data.CompanyName[n] for n in closest_matches]
+            
+            results.loc[i, 'key'] = leading_org
+            results.loc[i, 'matches'] = closest_names
+
+    return results
