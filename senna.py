@@ -10,7 +10,7 @@
 A module for interfacing with the SENNA pipeline.
 """
 
-from os import path, sep
+from os import path, sep, linesep
 from subprocess import Popen, PIPE
 from platform import architecture, system
 from nltk.tag.api import TaggerI
@@ -156,7 +156,7 @@ class SennaTagger(TaggerI):
         tagged_sentences = [[]]
         sentence_index = 0
         token_index = 0
-        for tagged_word in senna_output.strip().split("\n"):
+        for tagged_word in senna_output.strip().split(linesep):
             if not tagged_word:
                 tagged_sentences.append([])
                 sentence_index += 1
