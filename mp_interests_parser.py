@@ -12,7 +12,6 @@ import re
 import nltk
 import senna
 import itertools
-import numpy
 
 def get_scraped_data_into_dataframe():
     """Gets the scraped data from its JSON file and formats it as a dataframe"""
@@ -39,8 +38,6 @@ def get_scraped_data_into_dataframe():
     
     return scraped_data
     
-scraped_data = get_scraped_data_into_dataframe()
-
 def is_subsection_heading(tag):
     """Tests if the given tag is the header for a subsection."""
     has_susbsection_formatting = tag.name == "h3" 
@@ -133,7 +130,7 @@ def senna_batch_processor(texts, command):
         sentences.extend(sentences_in_text)
         num_sentences_per_text.append(len(sentences_in_text))
     
-    tagger = senna.SennaTagger('/Users/andyjones/senna', [command])
+    tagger = senna.SennaTagger('D:\Code\senna', [command])
     tagged_tokens = tagger.tag_sents(sentences)
 
     result = []
@@ -164,27 +161,33 @@ def gbp_and_named_entities(html):
     nonempty_pairs = [pair for pair in zip(gbp, entities) if pair[0] or pair[1]]
     
     return nonempty_pairs    
-    
-#results = scraped_data.xs("141208", level=1)['main_text'].apply(lambda x: tag_tree(x))
-test_html = scraped_data.xs("141208", level=1)['main_text'].iloc[-1]
-#test_text = list(results.iloc[0][0][0][0].value.strings)[0]
-#sentences = nltk.tokenize.sent_tokenize(test_text)
-#test_sentence = sentences[0]
 
-#
-
-def process_scraped_data():
-    source_html = scraped_data.xs("141208", level=1)['main_text']
+def process_scraped_data(html_df):
+    """Takes a dataframe containing a HTML string for each MP. The HTML is turned into a list of GBP quantities and 
+    named entities associated with each quantity, which is formatted into another dataframe and returned."""
     index = pd.MultiIndex.from_arrays([[], []], names=['mp', 'i'])
     results = pd.DataFrame(index=index, columns=['gbp', 'entities'], dtype=object)
-    for mp in source_html.index:
+    for mp in html_df.index:
         print(mp)
-        result = gbp_and_named_entities(source_html[mp])
+        result = gbp_and_named_entities(html_df[mp])
         if result:
             index = pd.MultiIndex.from_product([[mp], range(len(result))], names=['mp', 'i'])
             result = pd.DataFrame(result, index=index, columns=['gbp', 'entities'])
             results = results.append(result)
 
     return results
+
+## This is chunk of code that'll pull the HTML for the 2011, 2012, 2013 and 2014 register of interests and process it
+## all into a single dataframe.
+#
+#scraped_data = get_scraped_data_into_dataframe()
+#session_ids = ['1017', '925', '1782', '141208']
+#results = {}
+#for session in session_ids:
+#    results[session] = process_scraped_data(scraped_data.xs(session, level=1)['main_text'])
+#
+#results = pd.concat(results.values(), keys=results.keys(), names=['dataset'])
+#results = results.swaplevel(0, 1).sort_index()
+
 
 
